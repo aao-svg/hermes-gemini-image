@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+.env.*
+auth.json
+config.yaml
+.venv/
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.mp4
+evidence/
+receipts/

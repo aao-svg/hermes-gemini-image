@@ -1,0 +1,5 @@
+name: gemini-image
+version: 0.1.0
+description: "Independent Gemini image generation via an operator-supplied Anthropic Messages proxy."
+author: aao-svg
+kind: backend
