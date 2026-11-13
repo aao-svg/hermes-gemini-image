@@ -70,4 +70,17 @@ def resolve_settings(config: dict) -> dict[str, str]:
     model = section.get('model') or DEFAULT_MODEL
     if not isinstance(model, str) or not re.fullmatch(r'gemini-[A-Za-z0-9._-]*image[A-Za-z0-9._-]*', model):
         raise ValueError('Choose a Gemini image model explicitly.')
-    return {'base_url': validate_base_url(base_url), 'key_env': key_env, 'model': model}
+    plugins = config.get('plugins', {})
+    if not isinstance(plugins, dict):
+        raise ValueError('Plugin configuration must be a mapping.')
+    entries = plugins.get('entries', {})
+    if not isinstance(entries, dict):
+        raise ValueError('Plugin entries must be a mapping.')
+    entry = entries.get(PLUGIN, {})
+    if not isinstance(entry, dict) or not isinstance(entry.get('settings', {}), dict):
+        raise ValueError('Gemini plugin settings must be a mapping.')
+    thinking = entry.get('settings', {}).get('thinking', 'high')
+    if not isinstance(thinking, str) or thinking not in ('high', 'unspecified'):
+        raise ValueError('Plugin thinking must be high or unspecified.')
+    return {'base_url': validate_base_url(base_url), 'key_env': key_env, 'model': model,
+            'thinking': thinking}

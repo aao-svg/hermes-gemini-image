@@ -12,6 +12,27 @@
 
 比例以提示词发送，不保证精确尺寸；不提供分辨率、种子、放大或视频参数。参考图不支持网络 URL，不上传图床。
 
+## 插件默认思考设置
+
+规则只有：**插件设置 ＞ 代理默认行为**。不继承主聊天思考设置，不提供单次参数，Agent 即使传入旧的 `thinking` 参数也不会覆盖插件设置。
+
+- `high`（默认）：每次发送 `thinking: {type: adaptive}` 和 `output_config: {effort: high}`，`max_tokens` 上限为 16384，不混入固定 `budget_tokens`。
+- `unspecified`（不指定）：不发送 `thinking` / `output_config`，输出上限保持 4096，由代理决定思考行为；不等于关闭思考，代理仍可能默认 High。
+
+设置保存于 `plugins.entries.gemini-image.settings.thinking`。在 Hermes 插件中心中打开 `gemini-image` 的设置，选择“默认思考强度”：`high` 或 `unspecified`。这不是 Image Generation 后端列表中的单次工具参数。已验证 Hermes 原生字段描述能产生这两个选项；当前桌面实际点击链路尚未验收。
+
+也可通过插件脚本切换，先 dry-run 再执行：
+
+```bash
+python "$PLUGIN_DIR/configure.py" --thinking unspecified --dry-run
+python "$PLUGIN_DIR/configure.py" --thinking unspecified
+python "$PLUGIN_DIR/configure.py" --check
+```
+
+改回 High 时将 `unspecified` 替换为 `high`。`--thinking` 单独修改这一个插件设置，不改服务地址、密钥、模型或视频，不重新启用插件，不生成。每次生成重新读取设置，已加载新版代码后修改档位无需重启；旧安装版本需先升级才能支持。
+
+非法设置在联网前拒绝。返回 `thinking_requested` 表示本次使用的插件策略，`thinking_effective_verified: false` 表示插件不能逐次独立证明上游执行的档位。High 的一次授权测试已返回可解码图片，操作者提供的对应后台记录显示 High；这不保证其他代理版本相同，也不证明每张图质量提高。
+
 ## 安装与配置
 
 先读 [安装手册](docs/install.md) 和 [Agent 规则](AGENTS.md)。只支持目标机实际检查通过的 Hermes `ImageGenProvider` / `PluginContext.register_image_gen_provider` 接口，并需要现有 httpx 和 Pillow。不修改 Hermes 核心、不自动安装依赖。
@@ -49,7 +70,7 @@ hermes plugins validate "$PLUGIN_DIR" --json
 
 ## 验证边界
 
-用户在开发本插件前确认过该模型可通过其 Messages 代理生图；这不是本插件端到端验收。插件以离线 HTTP 夹具测试请求、输出和安全处理，不访问真实代理、不消耗额度。参考图编辑、其他代理实现、其他操作系统和其他 Hermes 版本需另行验证。
+High 的请求字段已做一次授权生图验收，返回 thinking 内容块及可解码图片，操作者提供的对应后台截图显示 High。插件默认设置的切换与单次参数隔离以离线测试验证，未为这次改动额外发起真实生成。自动测试不访问真实代理、不消耗额度。参考图编辑、其他代理实现、其他操作系统和其他 Hermes 版本需另行验证。
 
 ```bash
 python -m unittest discover -s tests -p 'test_*.py' -v

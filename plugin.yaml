@@ -1,5 +1,14 @@
 name: gemini-image
-version: 0.1.0
+version: 0.2.0
 description: "Independent Gemini image generation via an operator-supplied Anthropic Messages proxy."
 author: aao-svg
 kind: backend
+config_schema:
+  thinking:
+    type: string
+    label: "默认思考强度（high=高；unspecified=不指定）"
+    description: "默认 High；不指定时不发送思考字段，由代理决定。仅插件设置生效，不接受单次覆盖。"
+    default: high
+    choices:
+      - high
+      - unspecified

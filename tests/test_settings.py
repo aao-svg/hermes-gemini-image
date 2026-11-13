@@ -19,8 +19,23 @@ class SettingsTests(unittest.TestCase):
                                 'gemini_messages': {'source_provider': 'fixture'}}}
         self.assertEqual(module.resolve_settings(config), {
             'base_url': 'http://127.0.0.1:8080/v1', 'key_env': 'FIXTURE_KEY',
-            'model': 'gemini-3.1-flash-image'})
+            'model': 'gemini-3.1-flash-image', 'thinking': 'high'})
 
+
+    def test_plugin_thinking_defaults_high_and_accepts_unspecified_only(self):
+        spec = importlib.util.spec_from_file_location('gemini_settings_thinking', ROOT / 'settings.py')
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cfg: dict = {'image_gen': {'gemini_messages': {'base_url': 'http://127.0.0.1/v1'}}}
+        self.assertEqual(module.resolve_settings(cfg).get('thinking'), 'high')
+        for value in ('high', 'unspecified'):
+            cfg['plugins'] = {'entries': {'gemini-image': {'settings': {'thinking': value}}}}
+            self.assertEqual(module.resolve_settings(cfg)['thinking'], value)
+        for value in ('fast', '', None, False, [], 'HIGH'):
+            cfg['plugins'] = {'entries': {'gemini-image': {'settings': {'thinking': value}}}}
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                module.resolve_settings(cfg)
 
     def test_literal_inline_key_is_never_reused(self):
         spec = importlib.util.spec_from_file_location('gemini_settings_inline', ROOT / 'settings.py')

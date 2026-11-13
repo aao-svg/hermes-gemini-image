@@ -55,6 +55,44 @@ class ConfigureTests(unittest.TestCase):
             result = subprocess.run([cli, 'config', 'get', 'video_gen.provider', '--json'], env=env, capture_output=True, text=True)
             self.assertEqual(json.loads(result.stdout), 'offline-video')
 
+    def test_manifest_exposes_high_unspecified_plugin_setting(self):
+        from hermes_cli.plugins_settings import plugin_settings_fields
+        from unittest.mock import patch
+        with patch('hermes_cli.config.load_config_readonly', return_value={}):
+            fields = plugin_settings_fields('gemini-image', ROOT)
+        self.assertEqual(len(fields), 1)
+        self.assertEqual(fields[0]['key'], 'thinking')
+        self.assertEqual(fields[0]['type'], 'enum')
+        self.assertEqual(fields[0]['choices'], ['high', 'unspecified'])
+        self.assertEqual(fields[0]['value'], 'high')
+
+    def test_thinking_only_dry_run_and_real_cli_preserve_source_and_video(self):
+        import json
+        import os
+        import subprocess
+        import tempfile
+        cli = shutil.which('hermes')
+        if cli is None:
+            self.skipTest('Hermes CLI is not available')
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as home:
+            env = dict(os.environ, HERMES_HOME=home)
+            for key, value in [('video_gen.provider', 'offline-video'), ('image_gen.gemini_messages', '{"base_url": "http://127.0.0.1/v1"}')]:
+                r = subprocess.run([cli, 'config', 'set', key, value], env=env, capture_output=True, text=True)
+                self.assertEqual(r.returncode, 0, r.stderr)
+            script = [sys.executable, str(ROOT / 'configure.py'), '--thinking', 'unspecified', '--hermes-cli', cli]
+            before = (Path(home) / 'config.yaml').read_bytes()
+            dry = subprocess.run(script + ['--dry-run'], env=env, capture_output=True, text=True)
+            self.assertEqual(dry.returncode, 0, dry.stderr)
+            self.assertEqual((Path(home) / 'config.yaml').read_bytes(), before)
+            self.assertEqual(json.loads(dry.stdout)['commands'], [[cli, 'config', 'set', 'plugins.entries.gemini-image.settings.thinking', 'unspecified']])
+            applied = subprocess.run(script, env=env, capture_output=True, text=True)
+            self.assertEqual(applied.returncode, 0, applied.stderr)
+            from utils import fast_safe_load
+            config = fast_safe_load((Path(home) / 'config.yaml').read_text())
+            self.assertEqual(config['plugins']['entries']['gemini-image']['settings']['thinking'], 'unspecified')
+            self.assertEqual(config['image_gen']['gemini_messages'], {'base_url': 'http://127.0.0.1/v1'})
+            self.assertEqual(config['video_gen']['provider'], 'offline-video')
+
     def test_dry_run_does_not_resolve_secret_values(self):
         from unittest.mock import patch
         import contextlib

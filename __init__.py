@@ -213,8 +213,13 @@ class GeminiImageProvider(ImageGenProvider):
                 content.append(block)
         except Exception:
             return failure("Invalid reference images. Use up to four local absolute paths or PNG/JPEG/WebP data URIs, at most 10 MiB and 40 MP each, 24 MiB total.", "invalid_input")
+        thinking = settings.get("thinking", "high")
         body = {"model": model, "max_tokens": 4096, "stream": False,
                 "messages": [{"role": "user", "content": content}]}
+        if thinking == "high":
+            body["thinking"] = {"type": "adaptive"}
+            body["output_config"] = {"effort": "high"}
+            body["max_tokens"] = 16384
 
         try:
             with self._client_factory(timeout=180, follow_redirects=False) as client:
@@ -237,7 +242,9 @@ class GeminiImageProvider(ImageGenProvider):
         except Exception:
             return failure("The generated image could not be saved locally.", "storage_error")
         return success_response(image=str(path), model=model, prompt=prompt, aspect_ratio=ratio,
-                                provider=self.name, modality="image" if sources else "text")
+                                provider=self.name, modality="image" if sources else "text",
+                                extra={"thinking_requested": thinking,
+                                       "thinking_effective_verified": False})
 
 
 def register(ctx):

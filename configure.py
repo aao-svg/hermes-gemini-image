@@ -51,9 +51,11 @@ def check_configuration():
     discover_plugins()
     provider = image_gen_registry.get_active_provider()
     valid, key_present = False, False
+    thinking = None
     try:
         resolved = settings.resolve_settings(config)
         valid = True
+        thinking = resolved['thinking']
         key_present = bool(get_secret_str(resolved['key_env']))
     except (ValueError, RuntimeError, TypeError):
         pass
@@ -64,6 +66,7 @@ def check_configuration():
     available = bool(provider is not None and selected and provider.is_available())
     result = {'provider': section.get('provider'), 'model': section.get('model'),
               'settings_valid': valid, 'api_key_configured': key_present,
+              'thinking': thinking,
               'registered_and_available': available,
               'ready': bool(valid and key_present and available),
               'network_or_generation_tested': False}
@@ -92,6 +95,7 @@ def main(argv=None):
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--source-provider', help='Explicit existing anthropic_messages provider id; reuse its scoped key reference')
     group.add_argument('--base-url', help='Explicit HTTPS API root ending /v1, optional path prefix')
+    parser.add_argument('--thinking', choices=('high', 'unspecified'), help='Save plugin-wide thinking default only; no per-call override')
     parser.add_argument('--hermes-cli', help='Path to the target Hermes CLI')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--check', action='store_true')
@@ -99,9 +103,23 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.check:
-            if args.source_provider or args.base_url or args.dry_run or args.set_key:
+            if args.source_provider or args.base_url or args.dry_run or args.set_key or args.thinking:
                 raise ValueError('--check cannot be combined with configuration options.')
             return check_configuration()
+        if args.thinking:
+            if args.source_provider or args.base_url or args.set_key:
+                raise ValueError('--thinking changes only plugin settings; do not combine with source or credential options.')
+            cli = args.hermes_cli or shutil.which('hermes')
+            if not cli or not Path(cli).is_file() or not os.access(cli, os.X_OK):
+                raise ValueError('Run in the target Hermes environment or pass --hermes-cli.')
+            commands = [[cli, 'config', 'set', 'plugins.entries.gemini-image.settings.thinking', args.thinking]]
+            if args.dry_run:
+                print(json.dumps({'dry_run': True, 'commands': commands, 'secret_read': False}, indent=2))
+                return 0
+            preflight()
+            subprocess.run(commands[0], check=True)
+            print('Plugin thinking saved. No other settings, restart or generation changed.')
+            return 0
         if args.set_key and args.source_provider:
             raise ValueError('Source provider mode reuses its existing key; do not copy it.')
         if args.set_key and not args.dry_run and not sys.stdin.isatty():

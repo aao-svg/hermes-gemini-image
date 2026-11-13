@@ -106,6 +106,34 @@ python -m unittest discover -s "$PLUGIN_DIR/tests" -p 'test_*.py' -v
 
 真实图片生成必须单独授权，可能消耗额度；安装与离线校验不自动生成。超时/断连先查服务记录，不自动重发。
 
+### 插件默认思考强度
+
+`plugins.entries.gemini-image.settings.thinking` 默认 `high`；仅接受 `high` 和 `unspecified`，不提供单次覆盖，也不继承主聊天设置。缺少此项时仍为 High。
+
+- `high`：每次发送 `thinking.type=adaptive`、`output_config.effort=high`，不设固定预算，输出上限 16384。
+- `unspecified`：省略这两个思考字段，由代理决定，输出上限 4096；不是关闭思考。
+
+Hermes 插件中心中打开 `gemini-image` 设置，使用“默认思考强度”枚举。原生设置字段已做离线验证，桌面实际操作仍需在升级后验收。每次生成重新读设置，无单次工具参数。
+
+CLI 切换（只修改本项，不需重新输入地址或密钥）：
+
+```bash
+python "$PLUGIN_DIR/configure.py" --thinking unspecified --dry-run
+python "$PLUGIN_DIR/configure.py" --thinking unspecified
+python "$PLUGIN_DIR/configure.py" --check
+```
+
+改回默认 High：
+
+```bash
+python "$PLUGIN_DIR/configure.py" --thinking high --dry-run
+python "$PLUGIN_DIR/configure.py" --thinking high
+```
+
+`--thinking` 不与地址、供应方、密钥或 `--check` 参数混用。正式设置只通过 `hermes config set plugins.entries.gemini-image.settings.thinking ...` 写入。`--check` 额外显示有效 `thinking`；非法设置会未就绪。已加载新版代码后档位切换无需重启，但只修改开发仓库不影响现有安装，升级须另行获得授权并走官方更新流程。
+
+High 已有单次真实出图与操作者后台 High 记录证据；返回的 `thinking_requested` 仅是请求策略，不能当作每次上游执行确认。
+
 ## 6. Docker
 
 下面只是布局示例：容器 `hermes`，Hermes `/opt/hermes`，服务用户 `hermes`，数据 `/opt/data`。先核对实际名称、挂载和运行用户；直接 Python 必须以服务用户执行，不能让 root 写入只有其可读的密钥。

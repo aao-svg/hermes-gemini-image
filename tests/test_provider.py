@@ -77,7 +77,7 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(request.headers["anthropic-version"], "2023-06-01")
         body = json.loads(request.content)
         self.assertEqual(body["model"], "gemini-3.1-flash-image")
-        self.assertEqual(body["max_tokens"], 4096)
+        self.assertEqual(body["max_tokens"], 16384)
         self.assertIs(body["stream"], False)
         content = body["messages"][0]["content"]
         self.assertEqual(body["messages"][0]["role"], "user")
@@ -296,6 +296,45 @@ class ProviderTests(unittest.TestCase):
                 self.assertEqual(result["error_type"], "invalid_input")
         self.assertEqual(self.requests, [])
 
+    def test_plugin_high_ignores_single_call_override(self):
+        self.settings['thinking'] = 'high'
+        result = self.provider().generate('bird', thinking='fast')
+        self.assertTrue(result['success'], result)
+        body = json.loads(self.requests[0].content)
+        self.assertEqual(body.get('thinking'), {'type': 'adaptive'})
+        self.assertEqual(body.get('output_config'), {'effort': 'high'})
+        self.assertEqual(body['max_tokens'], 16384)
+        self.assertEqual(result.get('thinking_requested'), 'high')
+        self.assertNotIn('creative_controls', self.provider().capabilities())
+
+    def test_plugin_unspecified_omits_fields_even_with_single_call_high(self):
+        self.settings['thinking'] = 'unspecified'
+        result = self.provider().generate('bird', thinking='high')
+        self.assertTrue(result['success'], result)
+        body = json.loads(self.requests[0].content)
+        self.assertNotIn('thinking', body)
+        self.assertNotIn('output_config', body)
+        self.assertEqual(body['max_tokens'], 4096)
+        self.assertEqual(result.get('thinking_requested'), 'unspecified')
+
+    def test_native_schema_does_not_offer_single_call_thinking(self):
+        from tools import image_generation_tool
+        with patch.object(image_generation_tool, '_active_image_capabilities', return_value=self.provider().capabilities()):
+            schema = image_generation_tool._build_dynamic_image_schema()
+        self.assertNotIn('thinking', schema['parameters']['properties'])
+
+    def test_real_settings_are_reloaded_for_each_generation(self):
+        config: dict = {'image_gen': {'gemini_messages': {'base_url': 'http://127.0.0.1:8765/v1'}}}
+        with patch.object(self.module, 'resolve_settings', self.real_resolve_settings), patch.object(self.module, 'load_config', return_value=config):
+            provider = self.provider()
+            self.assertTrue(provider.generate('bird')['success'])
+            config['plugins'] = {'entries': {'gemini-image': {'settings': {'thinking': 'unspecified'}}}}
+            self.assertTrue(provider.generate('bird', thinking='high')['success'])
+        first, second = [json.loads(r.content) for r in self.requests]
+        self.assertEqual(first['output_config'], {'effort': 'high'})
+        self.assertNotIn('thinking', second)
+        self.assertNotIn('output_config', second)
+
     def test_model_override_and_config_default_ignore_unknown_controls(self):
         self.settings["model"] = "configured-image-model"
         provider = self.provider()
@@ -303,7 +342,7 @@ class ProviderTests(unittest.TestCase):
         self.assertTrue(provider.generate("bird", model="override-image-model")["success"])
         self.assertEqual([json.loads(request.content)["model"] for request in self.requests], ["configured-image-model", "override-image-model"])
         self.assertNotIn("resolution", json.loads(self.requests[0].content))
-        self.assertNotIn("creative_controls", provider.capabilities())
+        self.assertNotIn("resolution", provider.capabilities().get("creative_controls", []))
 
     def test_output_requires_declared_mime_and_does_not_salvage_malformed_data_uri(self):
         missing_mime = image_block()
